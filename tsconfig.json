@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["ES2017"],
+    "module": "none",
+    "moduleResolution": "node",
+    "typeRoots": ["./node_modules/@figma"],
+    "types": ["plugin-typings"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true
+  },
+  "include": ["code.ts"]
+}

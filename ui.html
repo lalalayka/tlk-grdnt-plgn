@@ -1,0 +1,291 @@
+<!doctype html>
+<html>
+<head>
+  <style>
+    :root {
+      --radius: 6px;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --font-family: Inter, "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-size: 11px;
+    }
+    html, body { margin: 0; padding: 0; height: auto; min-height: 0; }
+    body {
+      display: block;
+      font-family: var(--font-family);
+      font-size: var(--font-size);
+      color: var(--figma-color-text);
+      background-color: var(--figma-color-bg);
+    }
+    #plugin-root { height: auto; }
+
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      padding: var(--space-4) var(--space-4) var(--space-2);
+    }
+    .group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .group-title {
+      font-weight: 600;
+      color: var(--figma-color-text-secondary);
+    }
+    .field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .field > label {
+      color: var(--figma-color-text-secondary);
+    }
+    .input-wrap {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      width: 100px;
+      box-sizing: border-box;
+      padding: var(--space-1) var(--space-2);
+      border: 1px solid var(--figma-color-border);
+      border-radius: var(--radius);
+      background: var(--figma-color-bg-secondary);
+    }
+    .input-wrap input {
+      width: 100%;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--figma-color-text);
+      font: inherit;
+    }
+    .input-wrap .unit {
+      color: var(--figma-color-text-tertiary);
+    }
+
+    select#gradient {
+      width: 100px;
+      padding: var(--space-1) var(--space-2);
+      border: 1px solid var(--figma-color-border);
+      border-radius: var(--radius);
+      background: var(--figma-color-bg-secondary);
+      color: var(--figma-color-text);
+      font: inherit;
+    }
+
+    .preview-wrapper {
+      display: flex;
+      justify-content: center;
+    }
+    #preview {
+      display: block;
+      border-radius: 4px;
+      border: 1px solid var(--figma-color-border);
+    }
+
+    .footer {
+      background-color: var(--figma-color-bg);
+      box-shadow: inset 0 1px 0 0 var(--figma-color-border);
+      padding: var(--space-3) var(--space-4);
+    }
+    button#action-generate {
+      width: 100%;
+      border: none;
+      border-radius: var(--radius);
+      padding: var(--space-2) var(--space-3);
+      font: inherit;
+      font-weight: 600;
+      background: var(--figma-color-bg-brand);
+      color: var(--figma-color-text-onbrand);
+      cursor: pointer;
+    }
+    button#action-generate:hover:not(:disabled) {
+      background: var(--figma-color-bg-brand-hover);
+    }
+    button#action-generate:disabled {
+      background: var(--figma-color-bg-disabled);
+      color: var(--figma-color-text-disabled);
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div id="plugin-root">
+    <div class="content">
+      <div class="group">
+        <div class="group-title">Dimensions (4000px max)</div>
+        <div class="field">
+          <label for="width">Width</label>
+          <div class="input-wrap">
+            <input id="width" type="number" min="50" max="4000" value="400" />
+            <span class="unit">px</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="height">Height</label>
+          <div class="input-wrap">
+            <input id="height" type="number" min="50" max="4000" value="400" />
+            <span class="unit">px</span>
+          </div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="group-title">Gradient</div>
+        <div class="field">
+          <label for="gradient">Gradient</label>
+          <select id="gradient">
+            <option value="A + C" selected>A + C</option>
+            <option value="B + D">B + D</option>
+            <option value="C + E">C + E</option>
+            <option value="D + F">D + F</option>
+            <option value="E + G">E + G</option>
+            <option value="F + A">F + A</option>
+            <option value="G + B">G + B</option>
+          </select>
+        </div>
+      </div>
+      <div class="group">
+      <div class="group-title">Preview</div>
+      <div class="preview-wrapper">
+        <canvas id="preview" width="244" height="244"></canvas>
+      </div>
+      </div>
+    </div>
+    <div class="footer">
+      <button id="action-generate" type="button" disabled>Generate</button>
+    </div>
+  </div>
+  <script>
+    let lastReportedHeight = 0
+    let resizeRaf = 0
+
+    function measurePanelHeight() {
+      const root = document.getElementById('plugin-root')
+      if (!root) return 0
+      return Math.ceil(root.getBoundingClientRect().height)
+    }
+
+    function reportHeight() {
+      const h = measurePanelHeight()
+      if (h && h !== lastReportedHeight) {
+        lastReportedHeight = h
+        parent.postMessage({ pluginMessage: { type: 'resize', height: h } }, '*')
+      }
+    }
+
+    const pluginRoot = document.getElementById('plugin-root')
+    if (pluginRoot && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => {
+        if (resizeRaf) cancelAnimationFrame(resizeRaf)
+        resizeRaf = requestAnimationFrame(reportHeight)
+      }).observe(pluginRoot)
+    }
+
+    // --- Palette data from the plugin backend ---
+    let fileColors = [] // array of {r, g, b, a}, sorted A-G
+    let gradientMap = {} // gradient key -> [paletteIndex1, paletteIndex2], sent by the backend
+
+    function toCSS(c) {
+      return 'rgb(' + Math.round(c.r * 255) + ',' + Math.round(c.g * 255) + ',' + Math.round(c.b * 255) + ')'
+    }
+
+    function drawPreview() {
+      const canvas = document.getElementById('preview')
+      if (!canvas || fileColors.length < 7) return
+      const ctx = canvas.getContext('2d')
+
+      const gradientKey = String(document.getElementById('gradient').value)
+      const pair = gradientMap[gradientKey] || [0, 2]
+
+      const color1 = fileColors[pair[0]]
+      const color2 = fileColors[pair[1]]
+
+      // Fixed square preview — shows colors only, no aspect ratio
+      const size = 244
+      canvas.width = size
+      canvas.height = size
+      canvas.style.width = size + 'px'
+      canvas.style.height = size + 'px'
+
+      const padding = size * 0.125
+      const strokeWeight = size * 0.125
+
+      ctx.clearRect(0, 0, size, size)
+
+      // Color 1 - full background
+      ctx.fillStyle = toCSS(color1)
+      ctx.fillRect(0, 0, size, size)
+
+      // White border
+      const whiteS = size - padding * 2
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(padding, padding, whiteS, whiteS)
+
+      // Color 2
+      const c2s = whiteS - strokeWeight * 2
+      ctx.fillStyle = toCSS(color2)
+      ctx.fillRect(padding + strokeWeight, padding + strokeWeight, c2s, c2s)
+    }
+
+    // --- Control helpers ---
+    function hasParam(values, name) {
+      return Object.prototype.hasOwnProperty.call(values, name)
+    }
+
+    function setControlValue(id, value) {
+      const input = document.getElementById(id)
+      if (!input) return
+      input.value = String(value)
+    }
+
+    function setPanelParams(values) {
+      if (typeof values !== 'object' || values === null) return
+      if (hasParam(values, "width")) setControlValue("width", values.width)
+      if (hasParam(values, "height")) setControlValue("height", values.height)
+      if (hasParam(values, "gradient")) setControlValue("gradient", values.gradient)
+      drawPreview()
+    }
+
+    function currentParams() {
+      return {
+        width: Number(document.getElementById('width').value),
+        height: Number(document.getElementById('height').value),
+        gradient: String(document.getElementById('gradient').value),
+      }
+    }
+
+    // --- Event wiring ---
+    document.getElementById('action-generate').addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'action', id: "generate", params: currentParams() } }, '*')
+    })
+
+    // Live preview on gradient change
+    document.getElementById('gradient').addEventListener('change', drawPreview)
+
+    // --- Messages from the plugin backend ---
+    window.onmessage = (event) => {
+      const msg = event.data && event.data.pluginMessage
+      if (!msg) return
+      if (msg.type === 'colors') {
+        fileColors = msg.colors
+        gradientMap = msg.gradientMap || {}
+        drawPreview()
+      } else if (msg.type === 'params-change') {
+        setPanelParams(msg.params)
+      } else if (msg.type === 'action-state') {
+        const state = msg.actions && msg.actions.generate
+        const button = document.getElementById('action-generate')
+        if (button && state) button.disabled = !state.enabled
+      }
+    }
+
+    // Tell the backend our listener is attached and it's safe to send initial state
+    parent.postMessage({ pluginMessage: { type: 'ready' } }, '*')
+  </script>
+</body>
+</html>
